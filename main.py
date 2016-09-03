@@ -19,7 +19,12 @@ class ScrollableLayerManager(cocos.layer.scrolling.ScrollingManager, pyglet.even
     def __init__(self, screen_width, screen_height):
         self.viewport = rect.Rect(0,0,screen_width, screen_height)
         super(ScrollableLayerManager, self).__init__(self.viewport)
+
         # Selector Layer
+        self.selector_layer = SelectorLayer()
+        self.add(self.selector_layer, 6, 'selector')
+
+        # Overlay Layer
         self.overlay_layer = OverlayLayer()
         self.add(self.overlay_layer, 5, 'overlay')
 
@@ -28,8 +33,12 @@ class ScrollableLayerManager(cocos.layer.scrolling.ScrollingManager, pyglet.even
         self.add(self.shading_layer, 4, 'shading')
 
         # Unit Layer
+        self.unit_layer = UnitLayer()
+        self.add(self.unit_layer, 3, 'units')
 
         # Obstacle Layer
+        self.obstacle_layer = ObstacleLayer()
+        self.add(self.obstacle_layer, 2, 'obstacles')
 
         # Terrain Layer
         self.terrain_layer = TerrainLayer(screen_width, screen_height)
@@ -104,14 +113,25 @@ class ScrollableLayerManager(cocos.layer.scrolling.ScrollingManager, pyglet.even
             self.camera_direction_y = 0
 
 class SelectorLayer(cocos.layer.scrolling.ScrollableLayer):
-    # Init: Load the selector sprite
-    # If there are selected tiles, draw them.
-    pass
-
-class OverlayLayer(cocos.layer.scrolling.ScrollableLayer):
-    # This layer is used to highlight terrain.
     def __init__ (self):
-        super(OverlayLayer, self).__init__()
+        super(SelectorLayer, self).__init__()
+
+        self.primary_selector_sprite = cocos.sprite.Sprite('primary_selector.png')
+        self.primary_selector_sprite.image_anchor_x = 0
+        self.primary_selector_sprite.image_anchor_y = 0
+        self.primary_selector_sprite.position = (0, 0)
+
+        self.add(self.primary_selector_sprite)
+
+class TintLayer(cocos.layer.scrolling.ScrollableLayer):
+    """This creates layers to put a tint on the terrain.
+    """
+    def __init__(self, style):
+        super(TintLayer, self).__init__()
+
+        # Set up some parameters based on the style.
+        self.make_tint_image = None
+        self.set_function_by_style(style)
 
         # Get the dimensions of the map.
         map_dimensions = {
@@ -119,26 +139,32 @@ class OverlayLayer(cocos.layer.scrolling.ScrollableLayer):
             'height':15
         }
 
+        # Get the tile_size
         tile_size = 32
 
-        # Compose the image.
-        composed_image = self.make_highlight(tiles, map_dimensions, tile_size)
-        self.highlighted_terrain_sprite = cocos.sprite.Sprite(composed_image)
+        # Compose the layer image.
+        self.tint_image = self.make_tint_image(map_dimensions, tile_size)
 
-        # Add an action to fade the terrain overlay.
-        fade_action = FadeTo(64, 2) + FadeTo(192, 1)
-        self.highlighted_terrain_sprite.do(Repeat(fade_action))
-
-        # Center the overlay on top of the terrain.
-        self.highlighted_terrain_sprite.image_anchor_x = 0
-        self.highlighted_terrain_sprite.image_anchor_y = 0
-        self.highlighted_terrain_sprite.position = (0, 0)
+        # Center the image overlay on top of the terrain.
+        self.tint_image.image_anchor_x = 0
+        self.tint_image.image_anchor_y = 0
+        self.tint_image.position = (0, 0)
 
         # Now add the image to this object.
-        self.add(self.highlighted_terrain_sprite)
+        self.add(self.tint_image)
 
-    def make_highlight(self, tiles, map_dimensions, tile_size):
-        """Return a single image that contains the
+    def set_function_by_style(self, style):
+        """Set up functions based on the style of the TintLayer.
+        """
+        functions_by_style = {
+            'shading' :  self.make_shading_image,
+            'overlay' : self.make_overlay_image
+        }
+
+        self.make_tint_image = functions_by_style[style]
+
+    def make_overlay_image(self, map_dimensions, tile_size):
+        """Return a single image that contains the overlay colors
         """
         # Calculate dimensions of the master image.
         image_width = map_dimensions['width'] * tile_size;
@@ -191,34 +217,15 @@ class OverlayLayer(cocos.layer.scrolling.ScrollableLayer):
             rawData
         )
 
-        return highlighted_image
+        composed_image = cocos.sprite.Sprite(highlighted_image)
 
-class ShadingLayer(cocos.layer.scrolling.ScrollableLayer):
-    # This layer is used to shade most of the map.
-    def __init__ (self):
-        super(ShadingLayer, self).__init__()
+        # Add an action to fade the terrain overlay.
+        fade_action = FadeTo(64, 2) + FadeTo(192, 1)
+        composed_image.do(Repeat(fade_action))
 
-        # Get the dimensions of the map.
-        map_dimensions = {
-            'width':25,
-            'height':15
-        }
+        return composed_image
 
-        tile_size = 32
-
-        # Compose the image.
-        composed_image = self.make_shading(map_dimensions, tile_size)
-        self.shading_terrain_sprite = cocos.sprite.Sprite(composed_image)
-
-        # Center the overlay on top of the terrain.
-        self.shading_terrain_sprite.image_anchor_x = 0
-        self.shading_terrain_sprite.image_anchor_y = 0
-        self.shading_terrain_sprite.position = (0, 0)
-
-        # Now add the image to this object.
-        self.add(self.shading_terrain_sprite)
-
-    def make_shading(self, map_dimensions, tile_size):
+    def make_shading_image(self, map_dimensions, tile_size):
         """Return a single image that contains the
         """
         # Calculate dimensions of the master image.
@@ -236,7 +243,7 @@ class ShadingLayer(cocos.layer.scrolling.ScrollableLayer):
                 map_coordinate_j = int(y / tile_size)
 
                 # Determine the shading color based on the coordinate.
-                if map_coordinate_j == 3 and map_coordinate_i == 0:
+                if map_coordinate_i == 10 and map_coordinate_j == 5:
                     tile_color = transparent_color
                 else:
                     tile_color = shade_color
@@ -254,7 +261,53 @@ class ShadingLayer(cocos.layer.scrolling.ScrollableLayer):
             rawData
         )
 
-        return shaded_image
+        shaded_sprite = cocos.sprite.Sprite(shaded_image)
+
+        return shaded_sprite
+
+class OverlayLayer(TintLayer):
+    # This layer applies a colored overlay.
+    def __init__(self):
+        super(OverlayLayer, self).__init__('overlay')
+
+class ShadingLayer(TintLayer):
+    # This layer applies a shaded overlay on the screen.
+    def __init__(self):
+        super(ShadingLayer, self).__init__('shading')
+
+class UnitLayer(cocos.layer.scrolling.ScrollableLayer):
+    """Displays graphical representations of the Units on the map.
+    """
+    def __init__(self):
+        super(UnitLayer, self).__init__()
+
+        tilesize = 32
+
+        # Load some sprites
+        self.unit_sprite = cocos.sprite.Sprite("StickUnitRed.png", anchor=(0,0))
+
+        # Move sprites into position
+        self.unit_sprite.do(Place((10 * tilesize, 5 * tilesize)))
+
+        # Add the sprites to the layer.
+        self.add(self.unit_sprite)
+
+class ObstacleLayer(cocos.layer.scrolling.ScrollableLayer):
+    """Displays graphical representations of the Units on the map.
+    """
+    def __init__(self):
+        super(ObstacleLayer, self).__init__()
+
+        tilesize = 32
+
+        # Load some sprites
+        self.unit_sprite = cocos.sprite.Sprite("ObstacleRock.png", anchor=(0,0))
+
+        # Move sprites into position
+        self.unit_sprite.do(Place((2 * tilesize, 3 * tilesize)))
+
+        # Add the sprites to the layer.
+        self.add(self.unit_sprite)
 
 class TerrainLayer(cocos.tiles.RectMapLayer):
     """Builds the surface the units will travel across.
@@ -303,3 +356,4 @@ if __name__ == "__main__":
 # Hit Spark Layer
 # Combat Status Layer
 
+# How do I hide layers?
